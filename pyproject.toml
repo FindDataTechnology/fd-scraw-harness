@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fd-scraw-harness"
+dynamic = ["version"]
+description = "Automated datasource discovery pipeline: web search via LLM, page analysis via ego-browser, manifest generation via LiteLLM."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "FindDataOfficial" }]
+dependencies = [
+    "litellm>=1.0",
+    "fd-open-data-protocol",
+    "sqlalchemy>=2.0",
+    "click>=8.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+fd-scraw-harness = "fd_scraw_harness.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "fd_scraw_harness.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["fd_scraw_harness", "fd_scraw_harness.*"]
