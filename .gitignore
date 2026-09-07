@@ -6,3 +6,12 @@ build/
 data/
 *.db
 .env
+
+# Env / secrets (keep .env.example as the only tracked template)
+.env.*
+!.env.example
+
+# OS / misc
+.DS_Store
+*.log
+output/
