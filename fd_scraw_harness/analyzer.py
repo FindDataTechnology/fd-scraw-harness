@@ -1,11 +1,13 @@
-"""Page analyzer: uses ego-browser to visit URLs and extract structure."""
+"""Async page analyzer: uses ego-browser to visit URLs and extract structure."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-import subprocess
 
-from fd_scraw_harness.db import get_session
+from sqlalchemy import select
+
+from fd_scraw_harness.db import get_async_session
 from fd_scraw_harness.models import Analysis, Candidate
 
 logger = logging.getLogger(__name__)
@@ -43,11 +45,14 @@ await completeTaskSpace('harness-analyze', {{ keep: false }})
 """
 
 
-def analyze(url: str, discovery_id: int) -> int:
-    _check_ego_browser()
+async def analyze(url: str, discovery_id: int) -> int:
+    await _check_ego_browser()
 
-    with get_session() as sess:
-        candidate = sess.query(Candidate).filter_by(discovery_id=discovery_id, url=url).first()
+    async with get_async_session() as sess:
+        result = await sess.execute(
+            select(Candidate).filter_by(discovery_id=discovery_id, url=url)
+        )
+        candidate = result.scalar_one_or_none()
         if not candidate:
             raise ValueError(f"No candidate found for URL {url} in discovery {discovery_id}")
         candidate_id = candidate.id
@@ -58,25 +63,26 @@ def analyze(url: str, discovery_id: int) -> int:
         page_url=url,
         status="analyzing",
     )
-    with get_session() as sess:
+    async with get_async_session() as sess:
         sess.add(analysis)
-        sess.commit()
-        sess.refresh(analysis)
+        await sess.commit()
+        await sess.refresh(analysis)
         analysis_id = analysis.id
 
     heredoc = _EGO_HEREDOC.format(url=url)
     try:
-        result = subprocess.run(
-            ["ego-browser", "nodejs"],
-            input=heredoc,
-            capture_output=True,
-            text=True,
-            timeout=60,
+        proc = await asyncio.create_subprocess_exec(
+            "ego-browser", "nodejs",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        output = result.stdout
+        stdout, _ = await asyncio.wait_for(proc.communicate(input=heredoc.encode()), timeout=60)
+        output = stdout.decode(errors="replace")
     except FileNotFoundError:
         raise RuntimeError("ego-browser not found. Install from https://lite.ego.app/")
-    except subprocess.TimeoutExpired:
+    except asyncio.TimeoutError:
+        proc.kill()
         raise RuntimeError(f"ego-browser timed out analyzing {url}")
 
     page_info = _extract_json_line(output)
@@ -90,8 +96,9 @@ def analyze(url: str, discovery_id: int) -> int:
         except json.JSONDecodeError:
             logger.warning("Could not parse structure JSON")
 
-    with get_session() as sess:
-        a = sess.query(Analysis).filter_by(id=analysis_id).first()
+    async with get_async_session() as sess:
+        result = await sess.execute(select(Analysis).filter_by(id=analysis_id))
+        a = result.scalar_one()
         a.page_title = page_info.get("title", "") if page_info else ""
         a.dom_snapshot = snapshot or ""
         a.api_endpoints = json.dumps(structure.get("api_links", []))
@@ -100,15 +107,20 @@ def analyze(url: str, discovery_id: int) -> int:
         a.forms = str(structure.get("forms", 0))
         a.raw_analysis = output
         a.status = "completed"
-        sess.commit()
+        await sess.commit()
 
     logger.info("Analysis %d complete for %s", analysis_id, url)
     return analysis_id
 
 
-def _check_ego_browser() -> None:
+async def _check_ego_browser() -> None:
     try:
-        subprocess.run(["ego-browser", "--version"], capture_output=True, timeout=5)
+        proc = await asyncio.create_subprocess_exec(
+            "ego-browser", "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await asyncio.wait_for(proc.communicate(), timeout=5)
     except FileNotFoundError:
         raise RuntimeError("ego-browser not found. Install from https://lite.ego.app/")
 

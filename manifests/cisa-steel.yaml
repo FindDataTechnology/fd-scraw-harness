@@ -1,0 +1,31 @@
+version: "1"
+name: cisa-steel
+label: China Iron and Steel Association
+source_url: https://www.cisa.org.cn
+ranking_seed: [0.8, 0.7]
+functions:
+  - command: get_steel_production
+    category: industry
+    description: Monthly steel production statistics
+    parameters:
+      - name: start_month
+        type: str
+        required: false
+        description: Start month (YYYY-MM)
+    columns:
+      - name: month
+        type: str
+        description: Production month
+      - name: crude_steel
+        type: float
+        description: Crude steel output (10k tons)
+      - name: steel_products
+        type: float
+        description: Steel products output (10k tons)
+    frequency: monthly
+concepts:
+  - column: crude_steel
+    concept: production.steel
+    entity_type: commodity
+fetch:
+  runner: cisa-steel

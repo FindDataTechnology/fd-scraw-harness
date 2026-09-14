@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import (
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -40,6 +41,10 @@ class Candidate(Base):
     description = Column(Text)
     estimated_data_type = Column(String(64))
     score = Column(Integer, default=0)
+    # 覆盖分析字段
+    coverage_status = Column(String(32), default="unknown")  # covered, partial, new, unknown
+    coverage_details = Column(Text)  # JSON: {existing_sources: [...], overlapping_fields: [...]}
+    adjusted_score = Column(Integer)  # 调整后的优先级分数
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -89,3 +94,44 @@ class LLMCache(Base):
     __table_args__ = (
         UniqueConstraint("prompt_hash", "model_name", name="uq_llm_cache_hash_model"),
     )
+
+
+class SpiderTest(Base):
+    """Test execution results for spiders."""
+    __tablename__ = "spider_tests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    manifest_id = Column(Integer, ForeignKey("manifests.id"), nullable=True)
+    spider_path = Column(Text)  # Path to spider.py file
+    test_type = Column(String(32), nullable=False, default="full")  # full, syntax_only, mock_execution
+    status = Column(String(32), nullable=False, default="pending")  # pending, running, passed, failed, error
+    error_message = Column(Text)
+    error_traceback = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TestResult(Base):
+    """Detailed validation results for a spider test."""
+    __tablename__ = "test_results"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    test_id = Column(Integer, ForeignKey("spider_tests.id"), nullable=False)
+    is_valid = Column(Integer, nullable=False, default=1)  # Boolean: 1=valid, 0=invalid
+    validation_report = Column(Text)  # JSON: full validation report
+    failure_count = Column(Integer, default=0)
+    warning_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ExecutionMetrics(Base):
+    """Execution metrics for spider tests."""
+    __tablename__ = "execution_metrics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    test_id = Column(Integer, ForeignKey("spider_tests.id"), nullable=False)
+    execution_time_seconds = Column(Float, default=0.0)
+    records_fetched = Column(Integer, default=0)
+    memory_peak_mb = Column(Float, default=0.0)
+    cpu_time_seconds = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)

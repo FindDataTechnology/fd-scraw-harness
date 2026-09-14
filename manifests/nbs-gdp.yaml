@@ -1,0 +1,28 @@
+version: "1"
+name: nbs-gdp
+label: NBS GDP Data
+source_url: https://data.stats.gov.cn
+ranking_seed: [0.8, 0.7]
+functions:
+  - command: get_gdp_quarterly
+    category: macro
+    description: Quarterly GDP data from NBS
+    parameters:
+      - name: start_quarter
+        type: str
+        required: false
+        description: Start quarter (e.g. 2020Q1)
+    columns:
+      - name: quarter
+        type: str
+        description: Quarter identifier
+      - name: gdp_value
+        type: float
+        description: GDP in billion CNY
+    frequency: quarterly
+concepts:
+  - column: gdp_value
+    concept: gdp.nominal
+    entity_type: country
+fetch:
+  runner: nbs-gdp

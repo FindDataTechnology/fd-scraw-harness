@@ -1,11 +1,12 @@
-"""Discovery module: keyword search via LLM or direct URL."""
+"""Async discovery module: keyword search via LLM or direct URL."""
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 
-from fd_scraw_harness.db import get_session
+from sqlalchemy import select
+
+from fd_scraw_harness.db import get_async_session
 from fd_scraw_harness.llm import call_llm
 from fd_scraw_harness.models import Candidate, Discovery
 
@@ -25,24 +26,24 @@ Topic: {keyword}
 Return ONLY valid JSON. No markdown, no explanation."""
 
 
-def discover(keyword: str | None = None, url: str | None = None) -> int:
+async def discover(keyword: str | None = None, url: str | None = None) -> int:
     if keyword:
-        return _discover_keyword(keyword)
+        return await _discover_keyword(keyword)
     if url:
-        return _discover_url(url)
+        return await _discover_url(url)
     raise ValueError("Provide keyword or url")
 
 
-def _discover_keyword(keyword: str) -> int:
-    with get_session() as sess:
+async def _discover_keyword(keyword: str) -> int:
+    async with get_async_session() as sess:
         discovery = Discovery(query=keyword, query_type="keyword", status="discovering")
         sess.add(discovery)
-        sess.commit()
-        sess.refresh(discovery)
+        await sess.flush()
+        await sess.refresh(discovery)
         discovery_id = discovery.id
 
     prompt = _DISCOVERY_PROMPT.format(keyword=keyword)
-    raw = call_llm(prompt, phase="discovery")
+    raw = await call_llm(prompt, phase="discovery")
 
     try:
         candidates = json.loads(raw)
@@ -54,36 +55,35 @@ def _discover_keyword(keyword: str) -> int:
         else:
             raise ValueError(f"LLM did not return valid JSON: {raw[:200]}")
 
-    with get_session() as sess:
+    async with get_async_session() as sess:
         for c in candidates:
-            candidate = Candidate(
+            sess.add(Candidate(
                 discovery_id=discovery_id,
                 url=c.get("url", ""),
                 title=c.get("title"),
                 description=c.get("description"),
                 estimated_data_type=c.get("estimated_data_type"),
                 score=c.get("score", 0),
-            )
-            sess.add(candidate)
+            ))
 
-        d = sess.query(Discovery).filter_by(id=discovery_id).first()
+        result = await sess.execute(select(Discovery).filter_by(id=discovery_id))
+        d = result.scalar_one()
         d.status = "discovered"
-        sess.commit()
+        await sess.commit()
 
     logger.info("Discovery %d: found %d candidates for %r", discovery_id, len(candidates), keyword)
     return discovery_id
 
 
-def _discover_url(url: str) -> int:
-    with get_session() as sess:
+async def _discover_url(url: str) -> int:
+    async with get_async_session() as sess:
         discovery = Discovery(query=url, query_type="url", status="discovered")
         sess.add(discovery)
-        sess.commit()
-        sess.refresh(discovery)
+        await sess.flush()
+        await sess.refresh(discovery)
         discovery_id = discovery.id
 
-        candidate = Candidate(discovery_id=discovery_id, url=url, title=url, score=100)
-        sess.add(candidate)
-        sess.commit()
+        sess.add(Candidate(discovery_id=discovery_id, url=url, title=url, score=100))
+        await sess.commit()
 
     return discovery_id

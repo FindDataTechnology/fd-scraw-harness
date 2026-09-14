@@ -1,0 +1,31 @@
+version: "1"
+name: amac-fund
+label: Asset Management Association of China
+source_url: https://www.amac.org.cn
+ranking_seed: [0.8, 0.7]
+functions:
+  - command: get_fund_stats
+    category: financial
+    description: Fund industry statistics (AUM, count, etc.)
+    parameters:
+      - name: fund_type
+        type: str
+        required: false
+        description: Fund type (public/private)
+    columns:
+      - name: date
+        type: str
+        description: Statistics date
+      - name: fund_count
+        type: int
+        description: Number of funds
+      - name: aum_total
+        type: float
+        description: Total AUM (billion CNY)
+    frequency: monthly
+concepts:
+  - column: aum_total
+    concept: financial.aum
+    entity_type: fund
+fetch:
+  runner: amac-fund

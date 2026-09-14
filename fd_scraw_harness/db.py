@@ -1,12 +1,14 @@
-"""Database layer: SQLAlchemy engine factory for SQLite (default) and PostgreSQL."""
+"""Database layer: sync + async SQLAlchemy engines for SQLite and PostgreSQL."""
 from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from fd_scraw_harness.models import Base
@@ -24,6 +26,17 @@ def _build_url() -> str:
     return f"sqlite:///{_DEFAULT_SQLITE_PATH}"
 
 
+def _async_url(sync_url: str) -> str:
+    """Convert a sync DB URL to its async driver equivalent."""
+    if sync_url.startswith("sqlite:///") and "+aiosqlite" not in sync_url:
+        return sync_url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+    if sync_url.startswith("postgresql://"):
+        return sync_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if sync_url.startswith("postgresql+psycopg2://"):
+        return sync_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+    return sync_url
+
+
 def _ensure_sqlite_dir(url: str) -> None:
     if url.startswith("sqlite:///") and not url.endswith(":memory:"):
         db_path = url.replace("sqlite:///", "", 1)
@@ -34,7 +47,9 @@ class HarnessDB:
     def __init__(self, database_url: Optional[str] = None):
         self._database_url = database_url or _build_url()
         self._engine: Optional[Engine] = None
+        self._async_engine: Optional[AsyncEngine] = None
         self._session_factory: Optional[sessionmaker] = None
+        self._async_session_factory: Optional[sessionmaker] = None
 
     @property
     def database_url(self) -> str:
@@ -54,6 +69,13 @@ class HarnessDB:
         assert self._engine is not None
         return self._engine
 
+    @property
+    def async_engine(self) -> AsyncEngine:
+        if self._async_engine is None:
+            self._init_engine()
+        assert self._async_engine is not None
+        return self._async_engine
+
     def _init_engine(self) -> None:
         url = self._database_url
         _ensure_sqlite_dir(url)
@@ -65,6 +87,18 @@ class HarnessDB:
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.close()
         self._session_factory = sessionmaker(bind=self._engine, future=True)
+
+        aurl = _async_url(url)
+        self._async_engine = create_async_engine(aurl, echo=False, future=True)
+        if url.startswith("sqlite"):
+            @event.listens_for(self._async_engine.sync_engine, "connect")
+            def _set_wal_async(dbapi_conn, _conn_record):
+                cursor = dbapi_conn.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.close()
+        self._async_session_factory = sessionmaker(
+            bind=self._async_engine, class_=AsyncSession, expire_on_commit=False,
+        )
         logger.info("harness DB ready (database: %s)", self.database_url)
 
     def get_session(self) -> Session:
@@ -73,7 +107,19 @@ class HarnessDB:
         assert self._session_factory is not None
         return self._session_factory()
 
-    def init_db(self) -> None:
+    @asynccontextmanager
+    async def async_session(self):
+        if self._async_session_factory is None:
+            self._init_engine()
+        assert self._async_session_factory is not None
+        async with self._async_session_factory() as sess:
+            yield sess
+
+    async def init_db(self) -> None:
+        async with self.async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    def init_db_sync(self) -> None:
         self.engine.connect()
         Base.metadata.create_all(self.engine)
 
@@ -86,7 +132,11 @@ class HarnessDB:
                 f"Cannot connect to database ({self.database_url}): {e}"
             ) from e
 
-    def dispose(self) -> None:
+    async def dispose(self) -> None:
+        if self._async_engine is not None:
+            await self._async_engine.dispose()
+            self._async_engine = None
+            self._async_session_factory = None
         if self._engine is not None:
             self._engine.dispose()
             self._engine = None
@@ -100,13 +150,25 @@ def get_db() -> HarnessDB:
     global _default_db
     if _default_db is None:
         _default_db = HarnessDB()
-        _default_db.init_db()
+        _default_db.init_db_sync()
     return _default_db
 
 
+async def async_init_db() -> None:
+    db = get_db()
+    await db.init_db()
+
+
 def init_db() -> None:
-    get_db().init_db()
+    get_db().init_db_sync()
 
 
 def get_session() -> Session:
     return get_db().get_session()
+
+
+@asynccontextmanager
+async def get_async_session():
+    db = get_db()
+    async with db.async_session() as sess:
+        yield sess

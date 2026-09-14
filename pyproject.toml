@@ -13,9 +13,12 @@ authors = [{ name = "FindDataOfficial" }]
 dependencies = [
     "litellm>=1.0",
     "fd-open-data-protocol",
-    "sqlalchemy>=2.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
+    "httpx>=0.27",
     "click>=8.0",
     "pyyaml>=6.0",
+    "fastmcp>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +29,9 @@ fd-scraw-harness = "fd_scraw_harness.cli:main"
 
 [tool.setuptools.dynamic]
 version = { attr = "fd_scraw_harness.__version__" }
+
+[tool.setuptools]
+py-modules = ["fd_scraw_harness.server"]
 
 [tool.setuptools.packages.find]
 include = ["fd_scraw_harness", "fd_scraw_harness.*"]

@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import logging
 
-from fd_scraw_harness.db import get_session
+from sqlalchemy import select
+
+from fd_scraw_harness.db import get_async_session
 from fd_scraw_harness.llm import call_llm
 from fd_scraw_harness.models import Analysis, Discovery, Manifest
 
@@ -46,13 +48,19 @@ Analysis data:
 Generate ONLY the YAML. No markdown, no explanation."""
 
 
-def generate(discovery_id: int, max_retries: int = 1) -> int:
-    with get_session() as sess:
-        discovery = sess.query(Discovery).filter_by(id=discovery_id).first()
+async def generate(discovery_id: int, max_retries: int = 1) -> int:
+    async with get_async_session() as sess:
+        d_result = await sess.execute(
+            select(Discovery).filter_by(id=discovery_id)
+        )
+        discovery = d_result.scalar_one_or_none()
         if not discovery:
             raise ValueError(f"Discovery {discovery_id} not found")
 
-        analyses = sess.query(Analysis).filter_by(discovery_id=discovery_id, status="completed").all()
+        a_result = await sess.execute(
+            select(Analysis).filter_by(discovery_id=discovery_id, status="completed")
+        )
+        analyses = a_result.scalars().all()
         if not analyses:
             raise ValueError(f"No completed analyses for discovery {discovery_id}")
 
@@ -70,13 +78,14 @@ def generate(discovery_id: int, max_retries: int = 1) -> int:
     manifest_yaml = None
     validation_error = None
     model_used = None
+    raw = ""
 
     for attempt in range(max_retries + 1):
         prompt = _GENERATION_PROMPT.format(analysis_data=analysis_data)
         model_used = _get_model()
 
         try:
-            raw = call_llm(prompt, phase="generation")
+            raw = await call_llm(prompt, phase="generation")
             yaml_text = _extract_yaml(raw)
             _validate_yaml(yaml_text)
             manifest_yaml = yaml_text
@@ -89,7 +98,7 @@ def generate(discovery_id: int, max_retries: int = 1) -> int:
 
     status = "draft" if manifest_yaml else "invalid"
 
-    with get_session() as sess:
+    async with get_async_session() as sess:
         manifest = Manifest(
             discovery_id=discovery_id,
             analysis_id=analysis.id,
@@ -99,8 +108,8 @@ def generate(discovery_id: int, max_retries: int = 1) -> int:
             validation_error=validation_error,
         )
         sess.add(manifest)
-        sess.commit()
-        sess.refresh(manifest)
+        await sess.commit()
+        await sess.refresh(manifest)
         manifest_id = manifest.id
 
     logger.info("Manifest %d generated for discovery %d: status=%s", manifest_id, discovery_id, status)
