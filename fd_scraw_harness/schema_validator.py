@@ -64,32 +64,6 @@ class ValidationResult:
             "warnings": self.warnings,
         }
     
-    def summary(self) -> str:
-        """Human-readable summary."""
-        status = "✅ VALID" if self.is_valid else "❌ INVALID"
-        lines = [
-            f"{status} - Manifest: {self.manifest_name}",
-            f"Validated: {self.validated_at.strftime('%Y-%m-%d %H:%M:%S')}",
-        ]
-        
-        if self.failures:
-            lines.append(f"\nFailures ({len(self.failures)}):")
-            for i, f in enumerate(self.failures[:10], 1):  # Show first 10
-                lines.append(f"  {i}. [{f.path}] {f.message}")
-                if f.expected and f.actual:
-                    lines.append(f"      Expected: {f.expected}, Got: {f.actual}")
-            if len(self.failures) > 10:
-                lines.append(f"  ... and {len(self.failures) - 10} more")
-        
-        if self.warnings:
-            lines.append(f"\nWarnings ({len(self.warnings)}):")
-            for w in self.warnings[:5]:
-                lines.append(f"  • {w}")
-            if len(self.warnings) > 5:
-                lines.append(f"  ... and {len(self.warnings) - 5} more")
-        
-        return "\n".join(lines)
-
 
 def validate_manifest_yaml(yaml_content: str, manifest_name: str = "unknown") -> ValidationResult:
     """Validate a DatasourceManifest from YAML string."""
@@ -204,108 +178,6 @@ def _process_pydantic_errors(error: ValidationError, result: ValidationResult):
             expected=err.get("type"),
             actual=str(input_value)[:100] if input_value else None
         )
-
-
-def validate_sample_data(data: list[dict], 
-                         manifest: DatasourceManifest,
-                         sample_size: int = 10) -> ValidationResult:
-    """
-    Validate sample scraped data against manifest schema.
-    
-    This checks if actual crawled data conforms to the declared column structure.
-    """
-    result = ValidationResult(
-        is_valid=True,
-        manifest_name=manifest.name
-    )
-    
-    if not data:
-        result.add_warning("No sample data provided for validation")
-        return result
-    
-    # Limit to sample_size
-    sample = data[:sample_size]
-    
-    # Find functions that might produce this data
-    all_columns = {}
-    for func in manifest.functions:
-        for col in func.columns:
-            all_columns[col.name] = {
-                "type": col.type,
-                "description": col.description,
-                "function": func.command,
-            }
-    
-    # Check first record for required fields
-    if sample:
-        first_record = sample[0]
-        missing_fields = set(all_columns.keys()) - set(first_record.keys())
-        
-        if missing_fields:
-            result.add_failure(
-                "sample_data",
-                f"Sample data missing expected columns: {', '.join(sorted(missing_fields))}",
-                expected=f"all declared columns from manifest",
-                actual=", ".join(sorted(missing_fields))
-            )
-    
-    # Type validation (basic)
-    for i, record in enumerate(sample[:3]):  # Check first 3 records
-        for col_name, col_info in all_columns.items():
-            if col_name not in record:
-                continue
-            
-            value = record[col_name]
-            expected_type = col_info["type"]
-            
-            if expected_type:
-                type_valid = _check_type(value, expected_type)
-                if not type_valid:
-                    result.add_failure(
-                        f"data.records[{i}].{col_name}",
-                        f"Type mismatch: expected {expected_type}, got {type(value).__name__}",
-                        expected=expected_type,
-                        actual=f"{value!r}"
-                    )
-    
-    # Check for null values in potentially required fields
-    for col_name in all_columns:
-        null_count = sum(1 for r in sample if r.get(col_name) is None)
-        null_ratio = null_count / len(sample)
-        
-        if null_ratio > 0.5:  # More than 50% nulls is suspicious
-            result.add_warning(
-                f"Column '{col_name}' has {null_count}/{len(sample)} null values ({null_ratio:.1%})"
-            )
-    
-    return result
-
-
-def _check_type(value: Any, expected_type: str) -> bool:
-    """Basic type checking for common types."""
-    type_map = {
-        "string": str,
-        "str": str,
-        "int": int,
-        "integer": int,
-        "float": float,
-        "number": (int, float),
-        "bool": bool,
-        "boolean": bool,
-        "list": list,
-        "array": list,
-        "dict": dict,
-        "object": dict,
-        "null": type(None),
-        "none": type(None),
-    }
-    
-    python_type = type_map.get(expected_type.lower())
-    if python_type is None:
-        # Unknown type, skip validation
-        return True
-    
-    return isinstance(value, python_type)
 
 
 def create_validation_report(test_id: str,
@@ -451,4 +323,4 @@ functions:
 """
     
     result = validate_manifest_yaml(test_yaml, "test")
-    print(result.summary())
+    print(result.to_dict())
