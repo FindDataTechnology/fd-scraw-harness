@@ -23,6 +23,19 @@ from .common import (
 )
 
 
+
+
+def _label_of(m) -> str:
+    """Label lives in the YAML, not a column (the old m.label access crashed)."""
+    import yaml as _yaml
+
+    try:
+        data = _yaml.safe_load(m.manifest_yaml or "") or {}
+    except _yaml.YAMLError:
+        data = {}
+    return data.get("label", "Unknown Source") if isinstance(data, dict) else "Unknown Source"
+
+
 def register(app):
     """Register manifest generation and management tools tools on the FastMCP app."""
 
@@ -58,10 +71,10 @@ def register(app):
                 "manifest_id": manifest_id,
                 "status": m.status,
                 "source_name": m.source_name or "unknown",
-                "label": m.label or "Unknown Source",
+                "label": _label_of(m),
                 "model_used": m.model_used or "unknown",
                 "validation_error": m.validation_error,
-                "created_at": m.created_at.isoformat(),
+                "created_at": m.created_at.isoformat() if m.created_at else None,
             }
 
         except ValueError as e:
@@ -159,10 +172,10 @@ def register(app):
                     "id": m.id,
                     "status": m.status,
                     "source_name": m.source_name or "unknown",
-                    "label": m.label or "Unknown Source",
+                    "label": _label_of(m),
                     "model_used": m.model_used or "unknown",
                     "validation_error": m.validation_error,
-                    "created_at": m.created_at.isoformat(),
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
                 }
                 for m in manifests
             ]
