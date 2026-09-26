@@ -15,7 +15,7 @@ _GENERATION_PROMPT = """You are a data source manifest generator. Given page ana
 
 The YAML must conform to this schema:
 ```yaml
-version: "1"
+version: "2"
 name: <source-name>
 label: <human-readable label>
 source_url: <url>

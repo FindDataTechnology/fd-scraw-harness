@@ -502,15 +502,17 @@ async def list_manifests(status: Optional[str] = None) -> list[dict]:
 @app.tool
 @timeout_guard("export_manifest")
 async def export_manifest(manifest_id: int) -> dict:
-    """Export an approved manifest to YAML text.
+    """Export an approved manifest, aligned to the content-repo v2 contract.
 
-    Returns the full DatasourceManifest YAML conforming to fd-open-data-protocol.
+    Returns YAML (version coerced to "2", no scheduling fields), plus the
+    associated spider file path/code when present in the workspace — ready
+    to feed fd-industry-data scripts/land_source.py.
 
     Args:
         manifest_id: Manifest to export
 
     Returns:
-        Object with yaml string and size_bytes
+        Object with yaml, size_bytes, spider_path, spider_code
     """
     await async_init_db()
 
@@ -524,10 +526,35 @@ async def export_manifest(manifest_id: int) -> dict:
     if m.status != "approved":
         return {"error": f"Manifest {manifest_id} is {m.status}, not approved"}
 
-    yaml_text = m.manifest_yaml or ""
-    size_bytes = len(yaml_text.encode('utf-8'))
+    # Align to the content-repo v2 contract: version coerced to "2",
+    # scheduling fields stripped (landing must never light a source up).
+    import yaml as _yaml
 
-    return {"yaml": yaml_text, "size_bytes": size_bytes}
+    try:
+        data = _yaml.safe_load(m.manifest_yaml or "") or {}
+    except _yaml.YAMLError:
+        data = {}
+    if isinstance(data, dict):
+        data["version"] = "2"
+        for sched in ("schedule", "memory_limit", "cpu_limit", "enabled"):
+            data.pop(sched, None)
+        yaml_text = _yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+    else:
+        yaml_text = m.manifest_yaml or ""
+    size_bytes = len(yaml_text.encode("utf-8"))
+
+    # Associated spider file follows the spider_tester path convention.
+    source_name = m.source_name or f"manifest_{manifest_id}"
+    spider_path = None
+    for cand in (f"fd-industry-data/spiders/{source_name}/spider.py",
+                 f"fd-industry-data/spiders/{source_name.replace('-', '_')}/spider.py"):
+        if Path(cand).exists():
+            spider_path = cand
+            break
+    spider_code = Path(spider_path).read_text() if spider_path else None
+
+    return {"yaml": yaml_text, "size_bytes": size_bytes,
+            "spider_path": spider_path, "spider_code": spider_code}
 
 
 # ───────────────────── Coverage and Testing Tools ─────────────────────

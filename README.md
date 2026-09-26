@@ -228,3 +228,23 @@ Per-tool timeouts (seconds):
 - `HARNESS_TOOL_TIMEOUT_COVERAGE_REPORT`: 120 (default)
 - `HARNESS_TOOL_TIMEOUT_TEST_ALL_SPIDERS`: 600 (default)
 - Others: 30 (default)
+
+## Landing generated sources into fd-industry-data
+
+Approved exports are landing-ready for the content repo. The contract:
+
+- manifest: `version: "2"`, `name` = the directory slug (lowercase/-/_),
+  NO `schedule` (landing never lights a source up — that is a separate commit)
+- spider: a module-level `def run_<name>(limit: int = 100) -> list[dict]`
+  entry (`-` in the name becomes `_`) — see
+  `fd-industry-data/templates/new-source/spider.py`
+
+Landing (runs in the fd-industry-data checkout; local admission checks must
+pass before anything is committed):
+
+```bash
+cd ../fd-industry-data
+python3 scripts/land_source.py /tmp/x/manifest.yaml /tmp/x/spider.py
+# then: trigger a test run via MCP platform_trigger, and light up later
+# by adding `schedule:` to spiders/<src>/manifest.yaml in its own commit
+```
