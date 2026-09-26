@@ -29,8 +29,17 @@ CATEGORY_KEYWORDS = {
 
 
 def get_fd_open_data_mcp_sources() -> list[dict[str, Any]]:
-    """Get all registered data sources from fd-open-data-mcp."""
-    mcp_db_path = Path("/Users/chengsishi/finddata/fd-open-data-mcp/fd_open_data_mcp/metadata/daas.db")
+    """Get registered sources for overlap analysis (optional, read-only).
+
+    Path comes from FD_SOURCES_DB (a daas.db / catalog sqlite); the old
+    hardcoded dual-DB location is gone. Missing db = empty list, coverage
+    still works with keyword-only overlap."""
+    import os
+
+    env_path = os.environ.get("FD_SOURCES_DB", "")
+    if not env_path:
+        return []
+    mcp_db_path = Path(env_path)
     
     if not mcp_db_path.exists():
         logger.warning(f"fd-open-data-mcp database not found at {mcp_db_path}")

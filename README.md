@@ -229,6 +229,20 @@ Per-tool timeouts (seconds):
 - `HARNESS_TOOL_TIMEOUT_TEST_ALL_SPIDERS`: 600 (default)
 - Others: 30 (default)
 
+## Central state (platform integration)
+
+Pipeline state lives in the central `fd_open_data` PG since the
+harness-platform-integration change. Point the harness at it before use:
+
+```bash
+export HARNESS_DATABASE_URL='postgresql://fd:<password>@100.64.0.3:30432/fd_open_data'
+```
+
+Without the env var the harness falls back to a local sqlite (kept for
+tests only). One-time backfill: `scripts/migrate_sqlite_to_pg.py`
+(idempotent, backs up the sqlite file first). Any machine pointing at
+the same DSN shares one funnel.
+
 ## Landing generated sources into fd-industry-data
 
 Approved exports are landing-ready for the content repo. The contract:

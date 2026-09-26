@@ -5,17 +5,27 @@ import asyncio
 import pytest
 from unittest.mock import patch
 
-from fd_scraw_harness.server import (
-    harness_status,
+import asyncio
+
+import pytest
+from unittest.mock import patch
+
+from fd_scraw_harness.server import app
+from fd_scraw_harness.tools.common import (
     _tool_timeout,
     timeout_guard,
 )
 
 
+async def _tool(name, *args, **kwargs):
+    tool = await app.get_tool(name)
+    return await tool.fn(*args, **kwargs)
+
+
 @pytest.mark.asyncio
 async def test_harness_status_async():
     """Test harness_status returns expected structure."""
-    result = await harness_status()
+    result = await _tool("harness_status")
 
     assert isinstance(result, dict)
     assert "mode" in result
