@@ -158,11 +158,11 @@ Once connected, agents can call:
 | `generate_manifest(discovery_id)` | Generate DatasourceManifest YAML |
 | `list_candidates(discovery_id)` | List discovered sources with coverage status |
 | `list_manifests(status?)` | List manifests filtered by status |
-| `approve_manifest(id)` | Mark draft manifest as approved |
-| `reject_manifest(id)` | Reject a draft manifest |
-| `export_manifest(id)` | Export approved manifest as YAML text |
+| `approve_manifest(manifest_id)` | Mark draft manifest as approved |
+| `reject_manifest(manifest_id)` | Reject a draft manifest |
+| `export_manifest(manifest_id)` | Export approved manifest as YAML text |
 | `coverage_report()` | Full coverage analysis report |
-| `test_spider(manifest_id)` | Test spider implementation |
+| `test_spider(manifest_id_or_path, test_type?, verbose?)` | Test spider implementation (integer = manifest id, string = spider file path) |
 | `test_all_spiders(limit?, parallel?)` | Batch test all spiders |
 
 ### Example Workflow
@@ -200,7 +200,7 @@ Database:
 
 Starting from v0.2.0, the MCP server uses async tool handlers for improved concurrency and throughput:
 
-- All 14 MCP tools are `async def` handlers
+- All 12 MCP tools are `async def` handlers (12 is the count `tools/list` actually returns; the earlier "14" here was never true)
 - Database layer uses SQLAlchemy 2.0+ async engine (`aiosqlite` for SQLite, `asyncpg` for PostgreSQL)
 - HTTP calls use `httpx.AsyncClient` (LLM, discovery, analysis)
 - Subprocess calls use `asyncio.create_subprocess_exec` (ego-browser)
