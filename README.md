@@ -237,7 +237,7 @@ Pipeline state lives in the central `fd_open_data` PG since the
 harness-platform-integration change. Point the harness at it before use:
 
 ```bash
-export HARNESS_DATABASE_URL='postgresql://fd:<password>@100.64.0.3:30432/fd_open_data'
+export HARNESS_DATABASE_URL='postgresql://fd:<password>@<db-host>:30432/fd_open_data'
 ```
 
 Without the env var the harness falls back to a local sqlite (kept for
