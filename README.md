@@ -1,5 +1,7 @@
 # fd-scraw-harness
 
+> **Part of the [Wire line (寻数·柏讯)](https://www.finddatatech.cloud/products/wire) of [FindData](https://www.finddatatech.cloud)** — Crawl harness — shared scaffolding for source adapters: retries, pacing, evidence capture.
+
 Automated datasource discovery pipeline: web search via LLM, page analysis via ego-browser, manifest generation via LiteLLM, dual-database persistence.
 
 ## Install
