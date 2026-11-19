@@ -52,7 +52,8 @@ async def call_llm(
     prompt_hash = _hash_prompt(prompt)
 
     linjie_api_key = os.environ.get("LINJIE_API_KEY", "")
-    linjie_base_url = os.environ.get("LINJIE_BASE_URL", "https://www.linjie.love/v1")
+    # 默认值是 OpenAI 兼容的通用入口，不是某个具体中转站——选哪家是部署决定，不是代码决定。
+    linjie_base_url = os.environ.get("LINJIE_BASE_URL", "https://api.openai.com/v1")
 
     if not linjie_api_key:
         raise RuntimeError("Please set LINJIE_API_KEY environment variable")
