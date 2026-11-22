@@ -7,7 +7,7 @@ name = "fd-scraw-harness"
 dynamic = ["version"]
 description = "Automated datasource discovery pipeline: web search via LLM, page analysis via ego-browser, manifest generation via LiteLLM."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "FindDataOfficial" }]
 dependencies = [
@@ -18,7 +18,7 @@ dependencies = [
     "httpx>=0.27",
     "click>=8.0",
     "pyyaml>=6.0",
-    "fastmcp>=2.0",
+    "fastmcp>=4.2.4,<5",
 ]
 
 [project.optional-dependencies]
